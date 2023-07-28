@@ -1,4 +1,4 @@
-import os, subprocess, sys, math, re, random
+import os, subprocess, sys, math, re, random, traceback, time
 
 
 def read_arbitrary_bytes(file_path, num_bytes, pos):
@@ -76,13 +76,15 @@ def test_drive(path, block_size=1024*1024*10):  # 100MB block size
                     break
 
             check_percent = 3
-            max_checks = math.ceil(1024*1024*100/block_size)
-            
+            #max_checks = math.ceil((1024*1024*100)/block_size)
+            max_checks = 10
+
             min_max_checks = 5
             if max_checks < min_max_checks:
                 max_checks = min_max_checks
 
-            if block_num > 100/check_percent:
+            #if block_num > 100/check_percent:
+            if block_num > 3:
                 spaced_checks = math.ceil(block_num/(100/check_percent))
                 if spaced_checks > max_checks:
                     spaced_checks = max_checks
@@ -97,13 +99,21 @@ def test_drive(path, block_size=1024*1024*10):  # 100MB block size
                 chunks.pop(0)
                 chunks.pop()
                 #print(chunks)
+                bad = False
                 for chunk in chunks:
                     #rand_bytes = block_size * random.randint(1, block_num - 2)
                     #random_bytes = read_arbitrary_bytes(file, block_size, rand_bytes)
-                    random_bytes = read_arbitrary_bytes(file, block_size, chunk+(block_size*random.randint(  math.floor(0-((block_num/len(chunks)))/2) , math.floor(0+((block_num/len(chunks)))/2) )))
+                    byte_pos = chunk+(block_size*random.randint( math.floor(0-((block_num/len(chunks)))/2) , math.floor(0+((block_num/len(chunks)))/2) ))
+                    if byte_pos >= i:
+                        byte_pos = i-block_size
+                    if byte_pos < block_size:
+                        byte_pos = block_size
+                    random_bytes = read_arbitrary_bytes(file, block_size, byte_pos)
                     if random_bytes != data:
-                        print(f'A specific selection of a spaced out number of selections of bytes do not match what is expected around {chunk}')
-                        break
+                        print(f'A specific selection of a spaced out number of selections of bytes do not match what is expected around {byte_pos}')
+                        bad = True
+                if bad:
+                    break
 
 
             how_close = 0
@@ -115,7 +125,9 @@ def test_drive(path, block_size=1024*1024*10):  # 100MB block size
                 break
             i += block_size
         except Exception as e:
+            traceback_str = traceback.format_exc()
             print(e)
+            print(traceback_str)
             print(f'Could not write {i + block_size} to {file}')
             break
 
@@ -187,7 +199,7 @@ def format_drive_max(drive_letter: str):
 
     # Use the created script as input for diskpart
     diskpart_cmd_output = subprocess.check_output(['diskpart', '/s', 'diskpart_script.txt'], shell=True).decode()
-    #print(diskpart_cmd_output)
+    # print(diskpart_cmd_output)
     # Find the line corresponding to our drive 🦛
     for line in diskpart_cmd_output.split('\n'):
         #print(line.strip())
@@ -203,7 +215,7 @@ def format_drive_max(drive_letter: str):
                 'clean',
                 'create partition primary',
                 'sel part 1',
-                'format fs=NTFS quick',
+                'format fs=exFAT quick',
                 'exit']
 
     with open("diskpart_script.txt", "w") as file:
@@ -235,6 +247,8 @@ size = test_drive(drive)
 
 if size == 0:
     sys.exit()
+
+time.sleep(2)
 
 print(f'Partitioning to {size}MB')
 format_drive(drive.split(':')[0], size)
